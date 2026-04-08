@@ -2,24 +2,27 @@ import fitz  # PyMuPDF
 import base64
 import os
 import hashlib
+import time
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.messages import HumanMessage
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # 載入環境變數
 load_dotenv()
 
-# 初始化具備視覺能力的模型 (改用 gpt-4o-mini 大幅降低 Token 成本)
+# 初始化具備視覺能力的模型
 llm_vision = ChatOpenAI(model="gpt-4o-mini", temperature=0, max_tokens=1000)
 
 def encode_image(image_bytes):
-    """將圖片 bytes 轉換為 base64 編碼"""
     return base64.b64encode(image_bytes).decode('utf-8')
 
+# 加上 @retry 裝飾器：遇到 429 Error 時，會自動進行「指數退避 (Exponential Backoff)」重試
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=10))
 def extract_text_from_image(image_bytes):
-    """呼叫 GPT-4o-mini Vision 模型解析圖片內容"""
+    """呼叫 GPT-4o-mini Vision 模型解析圖片內容 (具備自動重試機制)"""
     base64_image = encode_image(image_bytes)
     message = HumanMessage(
         content=[
@@ -72,14 +75,19 @@ def process_pdf(pdf_path):
             processed_hashes.add(img_hash)
             
             print(f"🔍 發現關鍵圖表 (頁碼 {page_num+1}, 大小 {width}x{height})，正在呼叫 GPT-4o-mini 進行解析...")
-            vision_text = extract_text_from_image(image_bytes)
-            
-            # 如果 AI 判斷這不是裝飾圖片，就將解析出來的 Markdown 加入總文本
-            if "IGNORE" not in vision_text.upper():
-                print(f"✅ 圖片解析成功！內容已轉換為 Markdown。")
-                full_text += f"\n\n--- 第 {page_num+1} 頁圖片解析內容 ---\n" + vision_text
-            else:
-                print(f"⏭️ AI 判斷為裝飾性圖片，忽略。")
+            try:
+                vision_text = extract_text_from_image(image_bytes)
+                # 成功呼叫後，強制休眠 2 秒，避免瞬間併發請求過高觸發 429
+                time.sleep(2)
+                
+                # 如果 AI 判斷這不是裝飾圖片，就將解析出來的 Markdown 加入總文本
+                if "IGNORE" not in vision_text.upper():
+                    print(f"✅ 圖片解析成功！內容已轉換為 Markdown。")
+                    full_text += f"\n\n--- 第 {page_num+1} 頁圖片解析內容 ---\n" + vision_text
+                else:
+                    print(f"⏭️ AI 判斷為裝飾性圖片，忽略。")
+            except Exception as e:
+                print(f"❌ 圖片解析失敗，跳過此圖。錯誤訊息: {e}")
 
     return full_text
 
