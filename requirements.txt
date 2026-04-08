@@ -6,3 +6,5 @@ tiktoken
 sqlalchemy
 pandas
 python-dotenv
+PyMuPDF
+pillow
