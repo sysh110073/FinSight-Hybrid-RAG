@@ -1,6 +1,7 @@
 import fitz  # PyMuPDF
 import base64
 import os
+import hashlib
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.messages import HumanMessage
@@ -10,15 +11,15 @@ from langchain_community.vectorstores import Chroma
 # 載入環境變數
 load_dotenv()
 
-# 初始化具備視覺能力的模型 (GPT-4o)
-llm_vision = ChatOpenAI(model="gpt-4o", temperature=0, max_tokens=1000)
+# 初始化具備視覺能力的模型 (改用 gpt-4o-mini 大幅降低 Token 成本)
+llm_vision = ChatOpenAI(model="gpt-4o-mini", temperature=0, max_tokens=1000)
 
 def encode_image(image_bytes):
     """將圖片 bytes 轉換為 base64 編碼"""
     return base64.b64encode(image_bytes).decode('utf-8')
 
 def extract_text_from_image(image_bytes):
-    """呼叫 GPT-4o Vision 模型解析圖片內容"""
+    """呼叫 GPT-4o-mini Vision 模型解析圖片內容"""
     base64_image = encode_image(image_bytes)
     message = HumanMessage(
         content=[
@@ -36,9 +37,10 @@ def extract_text_from_image(image_bytes):
     return response.content
 
 def process_pdf(pdf_path):
-    """讀取 PDF，抽取純文字與圖片，並將圖片送去 OCR 轉換"""
+    """讀取 PDF，抽取純文字與圖片，並具備成本控管 (防護網) 機制"""
     doc = fitz.open(pdf_path)
     full_text = ""
+    processed_hashes = set()  # 用於圖片去重
     print(f"📄 開始解析 PDF: {pdf_path}")
 
     for page_num in range(len(doc)):
@@ -54,9 +56,22 @@ def process_pdf(pdf_path):
             xref = img[0]
             base_image = doc.extract_image(xref)
             image_bytes = base_image["image"]
-            image_ext = base_image["ext"]
             
-            print(f"🔍 發現圖片 (頁碼 {page_num+1}, 圖片 {img_index+1})，正在呼叫 GPT-4o 進行視覺解析...")
+            # 【防護網 1】: 大小過濾 (忽略長或寬小於 300 像素的 Icon/Logo)
+            width = base_image.get("width", 0)
+            height = base_image.get("height", 0)
+            if width < 300 or height < 300:
+                print(f"⏭️ 忽略極小圖片 (頁碼 {page_num+1}, 大小 {width}x{height})，節省 Token。")
+                continue
+
+            # 【防護網 2】: MD5 雜湊去重 (忽略每頁重複出現的背景圖或 Logo)
+            img_hash = hashlib.md5(image_bytes).hexdigest()
+            if img_hash in processed_hashes:
+                print(f"⏭️ 忽略重複圖片 (頁碼 {page_num+1})，節省 Token。")
+                continue
+            processed_hashes.add(img_hash)
+            
+            print(f"🔍 發現關鍵圖表 (頁碼 {page_num+1}, 大小 {width}x{height})，正在呼叫 GPT-4o-mini 進行解析...")
             vision_text = extract_text_from_image(image_bytes)
             
             # 如果 AI 判斷這不是裝飾圖片，就將解析出來的 Markdown 加入總文本
@@ -64,7 +79,7 @@ def process_pdf(pdf_path):
                 print(f"✅ 圖片解析成功！內容已轉換為 Markdown。")
                 full_text += f"\n\n--- 第 {page_num+1} 頁圖片解析內容 ---\n" + vision_text
             else:
-                print(f"⏭️ 忽略裝飾性圖片。")
+                print(f"⏭️ AI 判斷為裝飾性圖片，忽略。")
 
     return full_text
 
