@@ -1,4 +1,4 @@
-# 🏦 FinSight Hybrid-RAG (企業級法金授信 AI 助理)
+#  FinSight Hybrid-RAG (企業級法金授信 AI 助理)
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![LangChain](https://img.shields.io/badge/LangChain-Integration-green)
@@ -7,7 +7,7 @@
 
 本專案旨在建立一個企業級的「混合檢索增強生成 (Hybrid RAG)」系統，專為法人金融 (ARM/RM) 撰寫徵信報告與風險評估所設計。系統能夠同時從「結構化資料庫 (SQL)」獲取精確財務數據，並從「非結構化資料庫 (Vector DB)」檢索法說會逐字稿與新聞輿情，並具備處理財報圖表的多模態解析能力。
 
-## ✨ 核心亮點 (Core Features)
+##  核心亮點 (Core Features)
 
 1. **混合檢索大腦 (Hybrid RAG Router)**
    * 使用 `LangGraph ReAct Agent`。AI 能夠自動判斷使用者意圖，精準路由至 SQL Database 撈取財報數字，或去 Chroma Vector DB 撈取質化報告，最後融合為一篇無幻覺的專業回覆。
@@ -19,14 +19,14 @@
 4. **視覺化互動介面 (Streamlit UI)**
    * 拋棄終端機黑畫面，提供友善的對話式 Web 介面。
 
-## 🛠️ 技術棧 (Tech Stack)
+##  技術棧 (Tech Stack)
 * **LLM & Agent**: OpenAI (GPT-4o / GPT-4o-mini), LangChain, LangGraph
 * **Databases**: SQLite (Structured), ChromaDB (Vector)
 * **LLMOps**: LangSmith
 * **Frontend**: Streamlit
 * **Utils**: PyMuPDF, Tenacity, Pandas
 
-## 🚀 快速啟動 (Quick Start)
+##  快速啟動 (Quick Start)
 
 ### 1. 系統環境要求
 確保已安裝 Python 3.10+。
@@ -59,7 +59,7 @@ python setup_sql_db.py
 streamlit run app.py
 ```
 
-## 📂 專案結構 (Project Structure)
+##  專案結構 (Project Structure)
 ```text
 FinSight-RAG/
 ├── app.py                   # Streamlit 網頁主程式
