@@ -10,3 +10,4 @@ PyMuPDF
 pillow
 tenacity
 streamlit
+python-docx
