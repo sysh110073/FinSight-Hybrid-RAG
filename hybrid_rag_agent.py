@@ -34,11 +34,7 @@ def query_financial_data(query: str) -> str:
 # ==========================================
 # 模組 2: Vector RAG (處理非結構化法說會/新聞)
 # ==========================================
-loader = TextLoader("mock_tsmc_earnings_call.txt", encoding="utf-8")
-docs = loader.load()
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
-splits = text_splitter.split_documents(docs)
-vectorstore = Chroma.from_documents(documents=splits, embedding=OpenAIEmbeddings())
+vectorstore = Chroma(persist_directory="./chroma_db", embedding_function=OpenAIEmbeddings())
 retriever = vectorstore.as_retriever()
 
 rag_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
