@@ -11,3 +11,4 @@ pillow
 tenacity
 streamlit
 python-docx
+watchdog

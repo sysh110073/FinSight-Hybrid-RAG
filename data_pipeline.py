@@ -3,8 +3,8 @@ import shutil
 import time
 from pdf_vision_ingest import process_pdf, ingest_to_db
 
-INBOX_DIR = "./data_inbox"
-PROCESSED_DIR = "./data_processed"
+INBOX_DIR = "./rag_inbox"
+PROCESSED_DIR = "./rag_processed"
 
 def setup_directories():
     os.makedirs(INBOX_DIR, exist_ok=True)

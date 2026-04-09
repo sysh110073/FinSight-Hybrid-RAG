@@ -1,6 +1,7 @@
 import os
 import glob
 import json
+import shutil
 import docx
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -52,8 +53,11 @@ def generate_qa_pairs(report_text):
         print(f"GPT 回傳原始內容: {response.content}")
         return []
 
-def process_reports(input_dir="./finetune_reports", output_file="finetuning_dataset.jsonl"):
-    """掃描資料夾內所有 Word 檔，自動生成微調資料集"""
+def process_reports(input_dir="./finetune_reports", output_file="finetuning_dataset.jsonl", processed_dir="./finetune_processed"):
+    """掃描資料夾內所有 Word 檔，自動生成微調資料集並歸檔"""
+    os.makedirs(input_dir, exist_ok=True)
+    os.makedirs(processed_dir, exist_ok=True)
+    
     docx_files = glob.glob(os.path.join(input_dir, "*.docx"))
     
     if not docx_files:
@@ -81,8 +85,13 @@ def process_reports(input_dir="./finetune_reports", output_file="finetuning_data
             }
             all_qa_pairs.append(formatted_item)
 
-    # 寫入 JSONL 檔
-    with open(output_file, 'w', encoding='utf-8') as f:
+        # 處理成功後，將檔案移至 processed 資料夾
+        shutil.move(file_path, os.path.join(processed_dir, os.path.basename(file_path)))
+        print(f"✅ 檔案已歸檔至: {processed_dir}")
+
+    # 如果有新資料，採用「追加寫入 (Append)」模式或讀取舊資料合併
+    mode = 'a' if os.path.exists(output_file) else 'w'
+    with open(output_file, mode, encoding='utf-8') as f:
         for item in all_qa_pairs:
             f.write(json.dumps(item, ensure_ascii=False) + '\n')
             
