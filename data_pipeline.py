@@ -1,7 +1,7 @@
 import os
 import shutil
 import time
-from pdf_vision_ingest import process_pdf, ingest_to_db
+from pdf_vision_ingest import process_pdf, ingest_to_db, extract_metadata
 
 INBOX_DIR = "./rag_inbox"
 PROCESSED_DIR = "./rag_processed"
@@ -27,8 +27,9 @@ def run_pipeline():
         try:
             if file_name.endswith('.pdf'):
                 # 處理 PDF (包含多模態視覺 OCR)
+                meta = extract_metadata(file_path)
                 text = process_pdf(file_path)
-                ingest_to_db(text)
+                ingest_to_db(text, metadata=meta)
             elif file_name.endswith('.txt'):
                 # 處理純文字
                 with open(file_path, 'r', encoding='utf-8') as f:

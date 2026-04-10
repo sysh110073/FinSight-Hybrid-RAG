@@ -91,19 +91,56 @@ def process_pdf(pdf_path):
 
     return full_text
 
-def ingest_to_db(text):
-    """將解析後的完整文本切塊並存入 Vector DB"""
+import json
+from langchain_core.messages import SystemMessage
+
+def extract_metadata(pdf_path):
+    """使用 GPT-4o-mini 自動從 PDF 檔名與首頁萃取 Metadata (公司名稱、年份季別、產業別)"""
+    filename = os.path.basename(pdf_path)
+    try:
+        doc = fitz.open(pdf_path)
+        first_page = doc.load_page(0).get_text()
+        
+        prompt = f"""你是一個專業的金融資料工程師。
+請根據這個法說會簡報的檔名與首頁文字，精準提取以下 Metadata：
+1. "company_name" (公司名稱，例如 '台積電')
+2. "year_quarter" (年份與季別，例如 '2023Q4'，若無請填 'Unknown')
+3. "industry" (產業別，例如 '半導體', '金融業', '電子零組件')
+
+檔名：{filename}
+首頁文字內容：
+{first_page[:1000]}
+"""
+        messages = [
+            SystemMessage(content="你只能輸出純 JSON 格式，不要有 ```json 標記。"),
+            HumanMessage(content=prompt)
+        ]
+        response = llm_vision.invoke(messages)
+        content = response.content.replace("```json", "").replace("```", "").strip()
+        meta = json.loads(content)
+        meta["source"] = filename
+        return meta
+    except Exception as e:
+        print(f"⚠️ Metadata 提取失敗，將使用預設檔名。錯誤: {e}")
+        return {"source": filename}
+
+def ingest_to_db(text, metadata=None):
+    """將解析後的完整文本切塊並附加 Metadata 存入 Vector DB"""
     print("💾 開始將解析後的內容存入 Vector DB (Chroma)...")
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     texts = text_splitter.split_text(text)
     
+    # 若有 Metadata，為每個文字區塊附上相同的 Metadata
+    metadatas = [metadata] * len(texts) if metadata else None
+    
     # 存入 ChromaDB，持久化儲存
     vectorstore = Chroma.from_texts(
         texts=texts, 
+        metadatas=metadatas,
         embedding=OpenAIEmbeddings(),
         persist_directory="./chroma_db"
     )
-    print(f"🎉 成功存入 Vector DB，共 {len(texts)} 個文本區塊！")
+    print(f"🎉 成功存入 Vector DB，共 {len(texts)} 個文本區塊！附帶 Metadata: {metadata}")
 
 if __name__ == "__main__":
     import sys
@@ -112,8 +149,9 @@ if __name__ == "__main__":
     pdf_file = sys.argv[1] if len(sys.argv) > 1 else "sample_report.pdf"
     
     if os.path.exists(pdf_file):
+        meta = extract_metadata(pdf_file)
         final_text = process_pdf(pdf_file)
-        ingest_to_db(final_text)
+        ingest_to_db(final_text, metadata=meta)
     else:
         print(f"❌ 找不到檔案 {pdf_file}！")
         print("💡 請在終端機輸入: python pdf_vision_ingest.py <你的PDF檔名.pdf>")
