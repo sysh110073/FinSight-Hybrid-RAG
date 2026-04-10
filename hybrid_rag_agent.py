@@ -41,7 +41,7 @@ splits = text_splitter.split_documents(docs)
 vectorstore = Chroma.from_documents(documents=splits, embedding=OpenAIEmbeddings())
 retriever = vectorstore.as_retriever()
 
-rag_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+rag_llm = ChatOpenAI(model="ft:gpt-4.1-2025-04-14:personal::DSmsiQ2n", temperature=0)
 system_prompt = (
     "請根據以下檢索到的法說會內容來回答問題。若內容中沒有提到，請回答「資料中未提及」。\n\n檢索資料：\n{context}"
 )
