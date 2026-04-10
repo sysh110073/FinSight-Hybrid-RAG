@@ -39,8 +39,10 @@ def extract_text_from_image(image_bytes):
     response = llm_vision.invoke([message])
     return response.content
 
+TARGET_KEYWORDS = ["資產負債表", "損益表", "現金流量表", "權益變動表", "財務狀況表", "Balance Sheet", "Income Statement", "Cash Flow"]
+
 def process_pdf(pdf_path):
-    """讀取 PDF，抽取純文字與圖片，並具備成本控管 (防護網) 機制"""
+    """讀取 PDF，抽取純文字與圖片，並針對「四大報表向量表格」進行全頁高畫質 OCR"""
     doc = fitz.open(pdf_path)
     full_text = ""
     processed_hashes = set()  # 用於圖片去重
@@ -53,7 +55,28 @@ def process_pdf(pdf_path):
         page_text = page.get_text()
         full_text += f"\n\n--- 第 {page_num+1} 頁文字 ---\n" + page_text
 
-        # 2. 抽取圖片並用 Vision 模型轉換
+        # 【新增防護網：全頁財報表格偵測】
+        # 若頁面文字包含四大報表關鍵字，直接將全頁轉為高畫質圖片進行 OCR，避免漏掉向量表格
+        is_financial_statement = any(kw in page_text for kw in TARGET_KEYWORDS)
+        if is_financial_statement:
+            print(f"📊 偵測到財務報表關鍵字 (頁碼 {page_num+1})，啟動全頁高畫質 OCR 解析...")
+            try:
+                # 轉成高畫質圖片 (矩陣縮放 2 倍)
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                image_bytes = pix.tobytes("png")
+                vision_text = extract_text_from_image(image_bytes)
+                time.sleep(2)
+                
+                if "IGNORE" not in vision_text.upper():
+                    print(f"✅ 全頁財報解析成功！內容已轉換為 Markdown。")
+                    full_text += f"\n\n--- 第 {page_num+1} 頁財務報表 (全頁OCR解析) ---\n" + vision_text
+                
+                # 既然已經整頁解析，就不必再進去抓裡面的零碎小圖片了
+                continue
+            except Exception as e:
+                print(f"❌ 全頁財報解析失敗: {e}")
+
+        # 2. 抽取獨立圖片並用 Vision 模型轉換 (針對非財報頁面的普通圖表)
         image_list = page.get_images(full=True)
         for img_index, img in enumerate(image_list):
             xref = img[0]
@@ -95,34 +118,33 @@ import json
 from langchain_core.messages import SystemMessage
 
 def extract_metadata(pdf_path):
-    """使用 GPT-4o-mini 自動從 PDF 檔名與首頁萃取 Metadata (公司名稱、年份季別、產業別)"""
+    """從檔名中萃取精確的 Metadata，並確保結構化"""
     filename = os.path.basename(pdf_path)
-    try:
-        doc = fitz.open(pdf_path)
-        first_page = doc.load_page(0).get_text()
+    name_without_ext = os.path.splitext(filename)[0]
+    parts = name_without_ext.split("_")
+    
+    meta = {
+        "source": filename,
+        "company_code": "Unknown",
+        "company_name": "Unknown",
+        "year_quarter": "Unknown",
+        "doc_type": "Unknown",
+        "author": "Unknown"
+    }
+    
+    if len(parts) >= 5:
+        meta["company_code"] = parts[0]
+        meta["company_name"] = parts[1]
+        meta["year_quarter"] = parts[2]
+        meta["doc_type"] = parts[3]
+        meta["author"] = parts[4]
+        print(f"🏷️ 成功從檔名萃取 Metadata: {meta}")
+    else:
+        print(f"⚠️ 檔名格式不符標準 (預期: 代號_公司_年季_類型_來源.pdf)，已填入預設值。檔名: {filename}")
+        if len(parts) > 0: meta["company_code"] = parts[0]
+        if len(parts) > 1: meta["company_name"] = parts[1]
         
-        prompt = f"""你是一個專業的金融資料工程師。
-請根據這個法說會簡報的檔名與首頁文字，精準提取以下 Metadata：
-1. "company_name" (公司名稱，例如 '台積電')
-2. "year_quarter" (年份與季別，例如 '2023Q4'，若無請填 'Unknown')
-3. "industry" (產業別，例如 '半導體', '金融業', '電子零組件')
-
-檔名：{filename}
-首頁文字內容：
-{first_page[:1000]}
-"""
-        messages = [
-            SystemMessage(content="你只能輸出純 JSON 格式，不要有 ```json 標記。"),
-            HumanMessage(content=prompt)
-        ]
-        response = llm_vision.invoke(messages)
-        content = response.content.replace("```json", "").replace("```", "").strip()
-        meta = json.loads(content)
-        meta["source"] = filename
-        return meta
-    except Exception as e:
-        print(f"⚠️ Metadata 提取失敗，將使用預設檔名。錯誤: {e}")
-        return {"source": filename}
+    return meta
 
 def ingest_to_db(text, metadata=None):
     """將解析後的完整文本切塊並附加 Metadata 存入 Vector DB"""
