@@ -19,8 +19,8 @@ llm_vision = ChatOpenAI(model="gpt-4o-mini", temperature=0, max_tokens=1000)
 def encode_image(image_bytes):
     return base64.b64encode(image_bytes).decode('utf-8')
 
-# 加上 @retry 裝飾器：遇到 429 Error 時，會自動進行「指數退避 (Exponential Backoff)」重試
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=10))
+# 加上 @retry 裝飾器：遇到 429 Error 或連線問題時，最多重試 8 次，休眠時間從 2 秒遞增至 60 秒
+@retry(stop=stop_after_attempt(8), wait=wait_exponential(multiplier=2, min=2, max=60))
 def extract_text_from_image(image_bytes):
     """呼叫 GPT-4o-mini Vision 模型解析圖片內容 (具備自動重試機制)"""
     base64_image = encode_image(image_bytes)
@@ -75,6 +75,7 @@ def process_pdf(pdf_path):
                 continue
             except Exception as e:
                 print(f"❌ 全頁財報解析失敗: {e}")
+                time.sleep(5) # 失敗也休眠一下
 
         # 2. 抽取獨立圖片並用 Vision 模型轉換 (針對非財報頁面的普通圖表)
         image_list = page.get_images(full=True)
@@ -100,8 +101,8 @@ def process_pdf(pdf_path):
             print(f"🔍 發現關鍵圖表 (頁碼 {page_num+1}, 大小 {width}x{height})，正在呼叫 GPT-4o-mini 進行解析...")
             try:
                 vision_text = extract_text_from_image(image_bytes)
-                # 成功呼叫後，強制休眠 2 秒，避免瞬間併發請求過高觸發 429
-                time.sleep(2)
+                # 成功呼叫後，強制休眠 5 秒 (原為 2 秒)，避免連發觸發 429
+                time.sleep(5)
                 
                 # 如果 AI 判斷這不是裝飾圖片，就將解析出來的 Markdown 加入總文本
                 if "IGNORE" not in vision_text.upper():
@@ -110,7 +111,7 @@ def process_pdf(pdf_path):
                 else:
                     print(f"⏭️ AI 判斷為裝飾性圖片，忽略。")
             except Exception as e:
-                print(f"❌ 圖片解析失敗，跳過此圖。錯誤訊息: {e}")
+                print(f"❌ 圖片解析失敗 (已達重試上限)，跳過此圖。錯誤訊息: {e}")
 
     return full_text
 
