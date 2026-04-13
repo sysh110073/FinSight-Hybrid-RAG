@@ -43,13 +43,40 @@ system_prompt = (
 prompt = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", "{input}")])
 question_answer_chain = create_stuff_documents_chain(rag_llm, prompt)
 
-def create_filtered_retriever(doc_type: str):
-    # 使用 Chroma 的 metadata filtering 功能，增加檢索數量以涵蓋圖片 OCR 產生的表格
-    return vectorstore.as_retriever(search_kwargs={"k": 5, "filter": {"doc_type": doc_type}})
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 
-official_rag_chain = create_retrieval_chain(create_filtered_retriever("法說會"), question_answer_chain)
-financial_statement_chain = create_retrieval_chain(create_filtered_retriever("財報"), question_answer_chain)
-analyst_rag_chain = create_retrieval_chain(create_filtered_retriever("投顧報告"), question_answer_chain)
+hyde_prompt = ChatPromptTemplate.from_messages([
+    ("system", "請撰寫一段專業的金融研究報告段落，來回答以下問題。這段文字將用來檢索包含該資訊的真實財報或法說會內容，請包含可能出現的關鍵字（如：總資產、新台幣、仟元、產能利用率等）。"),
+    ("human", "問題：{question}\n\n假想的報告段落：")
+])
+
+hyde_chain = (
+    {"question": RunnablePassthrough()} 
+    | hyde_prompt 
+    | ChatOpenAI(model="gpt-4o-mini", temperature=0) 
+    | StrOutputParser()
+)
+
+def create_hyde_filtered_retriever(doc_type: str):
+    """
+    實作 RAG Flywheel Phase 3: 查詢轉換層 (Query Transformation - HyDE)
+    """
+    base_retriever = vectorstore.as_retriever(search_kwargs={"k": 10, "filter": {"doc_type": doc_type}})
+    
+    # 將自定義的檢索邏輯打包成 LangChain 可接受的 Runnable 格式
+    from langchain_core.runnables import RunnableLambda
+    
+    def hyde_retrieve(query: str):
+        hypothetical_document = hyde_chain.invoke(query)
+        search_query = f"Original Query: {query}\n\nHypothetical Document: {hypothetical_document}"
+        return base_retriever.invoke(search_query)
+        
+    return RunnableLambda(hyde_retrieve)
+
+official_rag_chain = create_retrieval_chain(create_hyde_filtered_retriever("法說會"), question_answer_chain)
+financial_statement_chain = create_retrieval_chain(create_hyde_filtered_retriever("財報"), question_answer_chain)
+analyst_rag_chain = create_retrieval_chain(create_hyde_filtered_retriever("投顧報告"), question_answer_chain)
 
 @tool
 def query_company_official_view(query: str) -> str:
