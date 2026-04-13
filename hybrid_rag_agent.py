@@ -34,7 +34,7 @@ def query_financial_data(query: str) -> str:
 # ==========================================
 # 模組 2: Vector RAG (處理非結構化法說會/投顧報告/新聞)
 # ==========================================
-vectorstore = Chroma(persist_directory="./chroma_db", embedding_function=OpenAIEmbeddings())
+vectorstore = Chroma(persist_directory="./chroma_db", embedding_function=OpenAIEmbeddings(model="text-embedding-3-large"))
 
 rag_llm = ChatOpenAI(model="ft:gpt-4.1-2025-04-14:personal::DSmsiQ2n", temperature=0)
 system_prompt = (
@@ -45,7 +45,7 @@ question_answer_chain = create_stuff_documents_chain(rag_llm, prompt)
 
 def create_filtered_retriever(doc_type: str):
     # 使用 Chroma 的 metadata filtering 功能，增加檢索數量以涵蓋圖片 OCR 產生的表格
-    return vectorstore.as_retriever(search_kwargs={"k": 10, "filter": {"doc_type": doc_type}})
+    return vectorstore.as_retriever(search_kwargs={"k": 5, "filter": {"doc_type": doc_type}})
 
 official_rag_chain = create_retrieval_chain(create_filtered_retriever("法說會"), question_answer_chain)
 financial_statement_chain = create_retrieval_chain(create_filtered_retriever("財報"), question_answer_chain)
