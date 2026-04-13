@@ -30,3 +30,4 @@ chroma_db/
 ehthumbs.db
 Thumbs.db
 \nfeedback_log.csv
+\n# Test and temp scripts\ntest_*.py\nadd_metadata*.py\nlist_db_content.py\npatch_*.py\ndebug_*.py\nfix_test.py
