@@ -48,12 +48,18 @@ def create_filtered_retriever(doc_type: str):
     return vectorstore.as_retriever(search_kwargs={"k": 5, "filter": {"doc_type": doc_type}})
 
 official_rag_chain = create_retrieval_chain(create_filtered_retriever("法說會"), question_answer_chain)
+financial_statement_chain = create_retrieval_chain(create_filtered_retriever("財報"), question_answer_chain)
 analyst_rag_chain = create_retrieval_chain(create_filtered_retriever("投顧報告"), question_answer_chain)
 
 @tool
 def query_company_official_view(query: str) -> str:
     """查詢公司自己發布的法說會或經營層展望資訊（例如：公司的毛利率預估、擴產計畫）。"""
     return official_rag_chain.invoke({"input": query})["answer"]
+
+@tool
+def query_financial_statement(query: str) -> str:
+    """查詢公司發布的官方財務報告、四大報表數據（例如：資產負債表、現金流量表、損益表數據）。"""
+    return financial_statement_chain.invoke({"input": query})["answer"]
 
 @tool
 def query_analyst_reports(query: str) -> str:
@@ -63,7 +69,7 @@ def query_analyst_reports(query: str) -> str:
 # ==========================================
 # 模組 3: Hybrid Orchestrator (混合檢索大腦)
 # ==========================================
-tools = [query_financial_data, query_company_official_view, query_analyst_reports]
+tools = [query_financial_data, query_company_official_view, query_financial_statement, query_analyst_reports]
 main_llm = ChatOpenAI(model="gpt-4o", temperature=0) # 使用較強的模型做判斷與統整
 main_prompt = ChatPromptTemplate.from_messages([
     ("system", "你是專業的法金 ARM 助理。請根據使用者的提問，呼叫合適的工具來回答。\n"
