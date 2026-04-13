@@ -44,8 +44,8 @@ prompt = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", 
 question_answer_chain = create_stuff_documents_chain(rag_llm, prompt)
 
 def create_filtered_retriever(doc_type: str):
-    # 使用 Chroma 的 metadata filtering 功能
-    return vectorstore.as_retriever(search_kwargs={"k": 5, "filter": {"doc_type": doc_type}})
+    # 使用 Chroma 的 metadata filtering 功能，增加檢索數量以涵蓋圖片 OCR 產生的表格
+    return vectorstore.as_retriever(search_kwargs={"k": 10, "filter": {"doc_type": doc_type}})
 
 official_rag_chain = create_retrieval_chain(create_filtered_retriever("法說會"), question_answer_chain)
 financial_statement_chain = create_retrieval_chain(create_filtered_retriever("財報"), question_answer_chain)
