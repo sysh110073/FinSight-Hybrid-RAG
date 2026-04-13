@@ -58,7 +58,7 @@ def query_company_official_view(query: str) -> str:
 
 @tool
 def query_financial_statement(query: str) -> str:
-    """查詢公司發布的官方財務報告、四大報表數據（例如：資產負債表、現金流量表、損益表數據）。"""
+    """用來查詢公司發布的官方財務報告、四大報表數據（例如：資產負債表的資產/負債金額、現金流量表數據）。"""
     return financial_statement_chain.invoke({"input": query})["answer"]
 
 @tool
@@ -73,7 +73,9 @@ tools = [query_financial_data, query_company_official_view, query_financial_stat
 main_llm = ChatOpenAI(model="gpt-4o", temperature=0) # 使用較強的模型做判斷與統整
 main_prompt = ChatPromptTemplate.from_messages([
     ("system", "你是專業的法金 ARM 助理。請根據使用者的提問，呼叫合適的工具來回答。\n"
-               "當遇到對公司未來展望的評估時，如果問題提及『交叉比對』或需要『客觀分析』，"
+               "1. 若詢問「EPS、營收、毛利率等精確硬數據」，優先呼叫 query_financial_data。\n"
+               "2. 若詢問「資產負債表、資產總額、負債總額等報表科目數據」，必須呼叫 query_financial_statement。\n"
+               "3. 當遇到對公司未來展望的評估時，如果問題提及『交叉比對』或需要『客觀分析』，"
                "請分別使用『query_company_official_view (公司官方說法)』與『query_analyst_reports (外部投顧看法)』進行比對，"
                "並將兩者的觀點融合成一篇專業的徵信報告段落。"),
     ("human", "{input}"),
